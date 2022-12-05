@@ -21,11 +21,14 @@ class MainController:
         self.__colunas_tabelas, self.__dicionario_mostra, self.__dicionario_esconde = {}, {}, {}
         # Mostra todos os possíveis tipos de registro, Nome, Tipo, Peso etc.
         self.__colunas, self.__lista_equipamentos, self.__atributos, self.__all_list_boxes = [], [], [], []
+        self.__elemento_equip = {}
+        self.__list_elemento = []
         # Tamanho da janela.
         self.__window_size = (500, 500)
         self.__window = sg.Window( 'Window', size=self.__window_size, layout=self.set_window_layout() )
-        self.__window_tabela, self.__window_atributo = None, None
-        self.__window_add_atributo, self.__window_del_atributo = None, None
+        self.__window_tabela, self.__window_atributo, self.__window_del_equip = None, None, None
+        self.__window_add_atributo, self.__window_del_atributo, self.__window_update_equip = None, None, None
+        self.__window_mostra = None
         self.get_tabelas()
         self.carrega_dicionarios()  # Carrega os dicionário que mostram/escodem os elementos e a lista de colunas.
 
@@ -42,13 +45,46 @@ class MainController:
         tabela_atual = ""
         if evento not in ('MouseWheel:Up', 'MouseWheel:Down', 'Cancel'):
             tabela_atual = valores['_equips_combo_'].lower()
-
+        #print(evento, valores)
         if evento == "_add_":
             if valores['_equips_combo_'] != 'Selecione':
                 self.trata_dados_tabela( tabela_atual, valores )
 
         elif evento == "_add_del_atributo_":
             self.manage_atributos()
+
+        elif evento == "_update_":
+            self.update_equip()
+
+        elif evento == "_confirmar_elemento_":
+            for elemento in valores:
+                if elemento in self.__list_elemento:
+                    if valores[elemento]:
+
+                        self.mostra_elementos(elemento)
+
+    def mostra_elementos(self, elemento):
+        pesquisa = self.pesquisar_banco_join(['item_atributo', 'atributos'],
+                                             ['idItem', 'nQuantidade', 'sDescricao'],
+                                             ['item_atributo', 'item_atributo', 'atributos'],
+                                             ['ID Item', 'Quantdiade', 'Descrição'],
+                                             ['atributos'], ['sDescricao'], [f'"{(elemento[1:-1])}"'], ['='], '' )
+
+        #def pesquisar_banco_join(self, tabelas, colunas, tabelas_colunas, nome_apresentado,
+        #                         tabela_condicao, condicoes, params_condicoes, sinais_condicoes, ordem):
+
+        layout = [
+            [sg.Listbox( values=pesquisa, size=(40, 20), pad=(0, 0))],
+            [sg.Cancel( button_text='Voltar', size=(20, 1) )]
+        ]
+        self.__window_mostra = sg.Window( title=elemento, size=(200, 350),
+                                          layout=layout, use_ttk_buttons=True,
+                                          finalize=True, resizable=True, modal=True )
+        while True:
+            event, values = self.__window_mostra.read()
+            if event == "Cancel" or event == sg.WIN_CLOSED:
+                break
+        self.__window_mostra.close()
 
     def check_telas(self, botao, valores):
         try:
@@ -69,10 +105,11 @@ class MainController:
 
             elif botao in self.__lista_equipamentos:
                 pesquisa = self.pesquisar_banco( botao[1:-1], [], [], [], '*', '' )
-                # self.__window["_list_equipamentos_"].Update( visible=True, values=pesquisa )
                 colunas = self.__colunas_tabelas[botao[1:-1]]
                 self.cria_tabela_exibicao( colunas, pesquisa, botao[1:-1] )
 
+            elif botao == "_del_":
+                self.del_equip()
             if botao not in self.__lista_equipamentos:
                 for i in self.__dicionario_mostra[botao]:
                     self.__window[i].Update( visible=True )
@@ -85,9 +122,109 @@ class MainController:
         except KeyboardInterrupt:
             pass
 
+    def update_equip(self):
+        layout = [
+            [sg.Combo( ['Acessorios', 'Amuletos', 'Aneis', 'Armas', 'Armaduras',
+                        'Botas', 'Calcas', 'Elmos', 'Escudos', 'Livros'],
+                       key='_equips_combo_', default_value='Selecione', readonly=True,
+                       enable_events=True )],
+            #[sg.Listbox( values=[], size=(30, 10), pad=(0, 0), key="list_equips", no_scrollbar=True,
+            #             enable_events=True )],
+            self.__all_list_boxes,
+            [sg.Button( "Alterar", key='_update_equip' )],
+            [sg.Button( "Voltar", key='_cancelar_del_equip_' )]
+        ]
+
+        self.__window_update_equip = sg.Window( title='Alterar equipamento', size=(500, 350), layout=layout,
+                                             use_ttk_buttons=True, finalize=True, resizable=True, modal=True )
+
+        while True:
+            event, values = self.__window_update_equip.read()
+            if event in (sg.WIN_CLOSED, '_cancelar_del_equip_'):
+                break
+            try:
+                tabela = values["_equips_combo_"].lower()
+
+                if tabela == "aneis":
+                    coluna = 'idAnel'
+                else:
+                    coluna = f'id{tabela[0:-1]}'
+                if event == "_equips_combo_":
+                    self.__window_update_equip = self.carrega_tabelas_update(tabela)
+                    dados_list = self.pesquisar_banco( tabela, [], [], [], '*', ' order by sNome' )
+                    self.__window_update_equip["list_equips"].Update( values=dados_list )
+
+                if event == "_update_equip":
+                    tabela = values["_equips_combo_"].lower()
+                    #id_equip = values["list_equips"][0]
+
+            except KeyError:
+                sg.popup( title='Erro!', custom_text='Selecione um registro!' )
+        self.__window_update_equip.close()
+
+    def carrega_tabelas_update(self, tabela):
+        pesquisa = self.pesquisar_banco( tabela, [], [], [], '*', '' )
+        colunas = self.__colunas_tabelas[tabela]
+        self.__all_list_boxes = []
+        textos_colunas = []
+        for i in range( len( colunas ) ):
+            col = []
+            textos_colunas.append( sg.Text( colunas[i].center( 10 ), key='_new_' + colunas[i] ) )
+            for j in pesquisa:
+                col.append( (j[i]) )
+
+            self.__all_list_boxes.append(
+                sg.Listbox( values=col, size=(10, 30), no_scrollbar=True,
+                            pad=(0, 0), key="list_" + colunas[i] ) )
+
+        self.__all_list_boxes = [self.__all_list_boxes]
+        textos_colunas = [textos_colunas]
+        return sg.Window( title=tabela.capitalize(), size=(len( colunas ) * 100, 350),
+                                          layout=self.layout_colunas( textos_colunas ), use_ttk_buttons=True,
+                                          finalize=True, resizable=True, modal=True )
+
+    def del_equip(self):
+        layout = [
+            [sg.Combo( ['Acessorios', 'Amuletos', 'Aneis', 'Armas', 'Armaduras',
+                        'Botas', 'Calcas', 'Elmos', 'Escudos', 'Livros'],
+                       key='_equips_combo_', default_value='Selecione', readonly=True,
+                       enable_events=True )],
+            [sg.Listbox( values=[], size=(30, 10), pad=(0, 0), key="list_equips", no_scrollbar=True,
+                         enable_events=True )],
+            [sg.Button( "Remover", key='_del_equip' )],
+            [sg.Button( "Cancelar", key='_cancelar_del_equip_' )]
+        ]
+
+        self.__window_del_equip = sg.Window( title='Remover equipamento', size=(500, 350), layout=layout,
+                                                use_ttk_buttons=True, finalize=True, resizable=True, modal=True )
+
+        while True:
+            event, values = self.__window_del_equip.read()
+            if event in (sg.WIN_CLOSED, '_cancelar_del_equip_'):
+                break
+            try:
+                tabela = values["_equips_combo_"].lower()
+                if tabela == "aneis":
+                    coluna = 'idAnel'
+                else:
+                    coluna = f'id{tabela[0:-1]}'
+                if event == "_equips_combo_":
+                    print( coluna )
+                    dados_list = self.pesquisar_banco(tabela, [], [], [], coluna + ', sNome', ' order by sNome')
+                    self.__window_del_equip["list_equips"].Update( values=dados_list )
+
+                if event == "_del_equip":
+                    tabela = values["_equips_combo_"].lower()
+                    id_equip = values["list_equips"][0]
+                    self.remover_banco(tabela, [coluna], id_equip)
+
+            except KeyError:
+                sg.popup( title='Erro!', custom_text='Selecione um registro!' )
+        self.__window_del_equip.close()
+
     def trata_dados_tabela(self, tabela_atual, valores):
         valores_tratados = []
-        vocacoes = ['druid', 'knight', 'paladin', 'sorcerer']
+        vocacoes = ['druid', 'knight', 'paladin', 'sorcerer', 'todas', 'knights and paladins', 'sorcerers and druids']
         resultado = self.pesquisar_banco(
             'information_schema.columns', ['table_name', 'column_key'],
             [str( tabela_atual ), 'PRI'], ['=', '!='], 'column_name, data_type, is_nullable',
@@ -97,23 +234,28 @@ class MainController:
 
         for col, type_column, is_nullable in resultado:
             check = valores[col].lower()
+
             try:
-                if type_column == 'int':
+
+                if is_nullable == 'YES' and check == '':
+                    if type_column == b'float' or type_column == b'int':
+                        check = 0
+                    else:
+                        check = ''
+                elif type_column == b'int':
                     check = int( valores[col] )
-                elif type_column == 'float':
+                elif type_column == b'float':
                     check = float( valores[col] )
                 elif col == 'sVocacao':
                     if check not in vocacoes:
                         raise VocException
                 if is_nullable == 'NO' and check == '':
                     raise CampoException
-
             except ValueError:
-                if type_column == 'int':
+                if type_column == b'int':
                     sg.popup( title='Erro!', custom_text=f'Digite um valor inteiro para o campo {col[1:]}!' )
-                elif type_column == 'float':
+                elif type_column == b'float':
                     sg.popup( title='Erro!', custom_text=f'Digite um valor flutuante para o campo {col[1:]}!' )
-
                 tamanho_lista -= 1
             except CampoException:
                 sg.popup( title='Erro!', custom_text=f'O campo {col[1:]} é obrigatório!' )
@@ -121,7 +263,6 @@ class MainController:
             except VocException:
                 sg.popup( title='Erro!', custom_text=f'Digite uma vocação entre: {vocacoes}.' )
                 tamanho_lista -= 1
-
             else:
                 if check == '':
                     check = None
@@ -131,7 +272,7 @@ class MainController:
                     valores_tratados = []
         if valores_tratados:
             self.inserir_banco( tabela_atual, valores_tratados )
-            sg.popup( title='Cadastro!', custom_text=f'Dados cadastrados com sucesso!' )
+            #sg.popup( title='Cadastro!', custom_text=f'Dados cadastrados com sucesso!' )
 
     def cria_tabela_exibicao(self, colunas, pesquisa, tabela):
         self.__all_list_boxes = []
@@ -181,10 +322,11 @@ class MainController:
 
         while True:
             event, values = self.__window_atributo.read()
-            tabela = values["_combo_element_equip"]
             self.carrega_lista_equips_em_atributos( event, values )
 
             try:
+
+                tabela = values["_combo_element_equip"]
                 if event == "_add_elemento_":
                     #if values["_id_list_element_"]:
                     id_equip = values["_id_list_element_"][0][0]
@@ -196,6 +338,9 @@ class MainController:
                     self.del_elemento( id_equip, values, tabela )
             except IndexError:
                 sg.popup( title='Erro!', custom_text='Selecione um registro!' )
+
+            except KeyboardInterrupt:
+                pass
             if event in ['_id_list_element_', '_name_list_element_', 'Up:38', 'Down:40']:
                 try:
                     selection = listbox1.get_indexes()[0]
@@ -240,10 +385,10 @@ class MainController:
             if event in (sg.WIN_CLOSED, '_voltar_'):
                 break
             if event == "_add_elemento_":
-                self.add_elemento( id_equip, values )
+                self.add_elemento(tabela, id_equip, values )
         self.__window_add_atributo.close()
 
-    def add_elemento(self, id_equip, values):
+    def add_elemento(self, tabela, id_equip, values):
         id_elemento, valor = -1, 0
         try:
             for id_elemento_layout in values:
@@ -276,14 +421,16 @@ class MainController:
             else:
                 string_ac_de = '-'
             self.inserir_banco( 'item_atributo',
-                                [id_elemento, id_equip, valor_porcentagem_inteiro, string_ac_de] )
+                                [id_elemento+1, id_equip, valor_porcentagem_inteiro,
+                                 string_ac_de, self.__elemento_equip[tabela]] )
 
     def del_elemento(self, id_equip, values, tabela):
         dados = self.pesquisar_banco_join( ['Item_atributo', 'Atributos', tabela],
                                    ['sNome', 'sDescricao', 'nQuantidade', 'sTipo'],
                                    [tabela, 'atributos', 'item_atributo', 'item_atributo'],
                                    ['Nome', 'Atributo', 'Quantidade', 'Aumenta/Diminui'],
-                                   [tabela], [self.colunas_tabelas[tabela.lower()][0]], [id_equip], ['='], '')
+                                   ['Item_atributo', tabela], ['nTipoEquip', self.colunas_tabelas[tabela.lower()][0]],
+                                           [self.__elemento_equip[tabela], id_equip], ['=', '='], '')
         dados_sem_id = []
         for i in dados:
             dados_sem_id.append(i[1:])
@@ -298,36 +445,44 @@ class MainController:
                                                 use_ttk_buttons=True, finalize=True, resizable=True, modal=True )
         while True:
             event, values = self.__window_del_atributo.read()
-
             if event in (sg.WIN_CLOSED, '_cancelar_del_elemento_'):
                 break
+            try:
+                id_atributo = values["_del_element_"][0][0]
+                if event == "_del_elemento_equip_":
+                    self.remover_banco("item_atributo", ['idAtributo', 'idItem'],
+                                       [id_atributo, id_equip])
 
-            if event == "_del_elemento_equip_":
-                try:
-                    self.remover_banco("item_atributo", ['idAtributo', self.__colunas_tabelas[tabela.lower()][0]],
-                                       [values["_del_element_"][0][0], id_equip])
-
-                except KeyError:
-                    sg.popup( title='Erro!', custom_text='Selecione um registro!' )
+            except KeyError:
+                sg.popup( title='Erro!', custom_text='Selecione um registro!' )
 
         self.__window_del_atributo.close()
-
 
     def pesquisar_banco_join(self, tabelas, colunas, tabelas_colunas, nome_apresentado,
                              tabela_condicao, condicoes, params_condicoes, sinais_condicoes, ordem):
         self.__conexao = self.carregaConexao()
         self.__cursor = self.__conexao.cursor()
-        # Monta o script das colunas.
-        if tabelas_colunas[0] != 'Aneis':
+        #if colunas[0] != '*':
+            # Monta o script das colunas.
+        coluna_consulta = ''
+        if tabelas_colunas[0] == 'item_atributo':
+            coluna_consulta = ''
+
+        elif tabelas_colunas[0] != 'Aneis':
             coluna_consulta = 'id' + tabelas_colunas[0][0:-1] + ', '
-        else:
+
+        elif tabelas_colunas[0] != 'Aneis':
             coluna_consulta = 'idAnel, '
+
         coluna_consulta += f'{tabelas[1]}.idAtributo, '
         for i in range(len(tabelas_colunas)):
             coluna_consulta += f'{tabelas_colunas[i]}.{colunas[i]} as "{nome_apresentado[i]}",\n'
         coluna_consulta = coluna_consulta[:-2]
 
         comando = f'select {coluna_consulta} from {tabelas[0]} {tabelas[0]} '
+        #else:
+        #    comando = f'select {colunas[0]} from {tabelas[0]} {tabelas[0]}'
+
         # Insere os joins na consulta.
         for tabela in tabelas[2:]:
             if tabela != "Aneis":
@@ -342,9 +497,11 @@ class MainController:
             comando += " where "
             for i in range(len(condicoes)):
                 comando += f'{tabela_condicao[i]}.{condicoes[i]} {sinais_condicoes[i]} {params_condicoes[i]} and '
-            comando = comando[:-4]
 
+            comando = comando[:-4]
+        print(comando)
         comando += ordem
+
         self.__cursor.execute( comando )
         resultado = self.__cursor.fetchall()
         # Fecha conexão.
@@ -436,7 +593,8 @@ class MainController:
 
             self.add_registro_secao(),
 
-            [sg.Button( 'Adicionar', key='_add_', visible=False ), sg.Button( 'Remover', key='_del_', visible=False )],
+            [sg.Button( 'Adicionar', key='_add_', visible=False ), sg.Button( 'Remover', key='_del_', visible=False),
+             sg.Button('Alterar', key='_update_', visible=False)],
 
             [sg.Column( self.__all_list_boxes, scrollable=True, pad=(0, 0), expand_y=True, expand_x=True,
                         key='_coluna_valores_', visible=False )],
@@ -483,6 +641,7 @@ class MainController:
         self.__cursor = self.__conexao.cursor()
         # Comando utilizando para consulta no banco.
         comando = f'select {colunas} from {tabela}'
+
         if condicoes:
             comando += ' where '
             for i in range( len( condicoes ) ):
@@ -517,8 +676,6 @@ class MainController:
         tabela_parametros += ")"
         try:
             comando = f'insert into {tabela} {tabela_parametros} values {tuple( valores_tratados )}'
-            if None in valores_tratados:
-                print( comando )
             self.__cursor.execute( comando )
         except mysql.connector.errors.DataError:
             print( "Insira os dados conforme as colunas: ", tabela_parametros + "." )
@@ -535,20 +692,17 @@ class MainController:
         self.__cursor = self.__conexao.cursor()
 
         comando = f'delete from {tabela} where '
-
         for i in range(len(coluna_condicao)):
             comando += f'{coluna_condicao[i]} = {dados[i]} and '
 
         comando = comando[:-4]
-        print( "comando",comando )
         try:
             self.__cursor.execute( comando )
         except Exception as e:
             print(e)
         else:
-            print(comando)
             self.__conexao.commit()
-            sg.popup( title='Remover Atributo', custom_text='Atributo removido com sucesso!' )
+            sg.popup( title='Dado removido!', custom_text='Dado removido com sucesso!' )
 
         self.__cursor.close()
         self.__conexao.close()
@@ -592,7 +746,7 @@ class MainController:
                                "_escudos_", "_elmos_", "_livros_", "_text_equipamentos_", "_voltar_equipamentos_"],
             "_voltar_equipamentos_": ["_texto_menu_", "_elemento_", "_EXIT_", "_equipamentos_", "_inserir_",
                                       "_add_del_atributo_"],
-            "_inserir_": ["_equips_combo_", "_add_", "_del_", "_voltar_equipamentos_"],
+            "_inserir_": ["_equips_combo_", "_add_", "_del_", "_voltar_equipamentos_", "_update_"],
             "_add_": [],
             "_del_": [],
             "_equips_combo_": [],
@@ -609,14 +763,25 @@ class MainController:
             "_voltar_equipamentos_": ["_acessorios_", "_amuletos_", "_armaduras_", "_aneis_", "_armas_", "_botas_",
                                       "_calcas_", "_escudos_", "_elmos_", "_livros_",
                                       "_text_equipamentos_", "_voltar_equipamentos_",
-                                      "_equips_combo_", "_add_", "_del_"],
+                                      "_equips_combo_", "_add_", "_del_", "_update_"],
             "_inserir_": ["_texto_menu_", "_elemento_", "_EXIT_", "_equipamentos_", "_inserir_", "_add_del_atributo_"],
             "_add_": [],
             "_del_": [],
             "_equips_combo_": [],
             "_equip_": ["_elemento_", "_equipamentos_", "_inserir_", "_equips_combo_"]
         }
-
+        self.__elemento_equip = {
+            "Acessorios": 1,
+            "Amuletos": 2,
+            "Aneis": 3,
+            "Armas": 4,
+            "Armaduras": 5,
+            "Botas": 6,
+            "Calcas": 7,
+            "Escudos": 8,
+            "Elmos": 9,
+            "Livros": 10
+        }
         self.__colunas = [
             'fPeso', 'nArm', 'nAtk', 'nCargas', 'nDuracao', 'nDef', 'nDuasMaos', 'nNivelMinimo', 'nQtImbuiSlot',
             'sNome', 'sTipo', 'sVocacao',
@@ -627,6 +792,8 @@ class MainController:
 
         self.__lista_equipamentos = ['_acessorios_', '_amuletos_', '_aneis_', '_armas_',
                                      '_armaduras_', '_botas_', '_calcas_', '_elmos_', '_escudos_', '_livros_']
+
+        self.__list_elemento = ["_fogo_", "_gelo_", "_terra_", "_energia_", "_sagrado_", "_morte_", "_fisico_"]
 
         self.__atributos = self.pesquisar_banco( 'atributos', [], [], [], '*', '' )
 
