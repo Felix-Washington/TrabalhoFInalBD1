@@ -45,7 +45,6 @@ class MainController:
         tabela_atual = ""
         if evento not in ('MouseWheel:Up', 'MouseWheel:Down', 'Cancel'):
             tabela_atual = valores['_equips_combo_'].lower()
-        #print(evento, valores)
         if evento == "_add_":
             if valores['_equips_combo_'] != 'Selecione':
                 self.trata_dados_tabela( tabela_atual, valores )
@@ -69,9 +68,6 @@ class MainController:
                                              ['item_atributo', 'item_atributo', 'atributos'],
                                              ['ID Item', 'Quantdiade', 'Descrição'],
                                              ['atributos'], ['sDescricao'], [f'"{(elemento[1:-1])}"'], ['='], '' )
-
-        #def pesquisar_banco_join(self, tabelas, colunas, tabelas_colunas, nome_apresentado,
-        #                         tabela_condicao, condicoes, params_condicoes, sinais_condicoes, ordem):
 
         layout = [
             [sg.Listbox( values=pesquisa, size=(40, 20), pad=(0, 0))],
@@ -209,7 +205,6 @@ class MainController:
                 else:
                     coluna = f'id{tabela[0:-1]}'
                 if event == "_equips_combo_":
-                    print( coluna )
                     dados_list = self.pesquisar_banco(tabela, [], [], [], coluna + ', sNome', ' order by sNome')
                     self.__window_del_equip["list_equips"].Update( values=dados_list )
 
@@ -272,7 +267,6 @@ class MainController:
                     valores_tratados = []
         if valores_tratados:
             self.inserir_banco( tabela_atual, valores_tratados )
-            #sg.popup( title='Cadastro!', custom_text=f'Dados cadastrados com sucesso!' )
 
     def cria_tabela_exibicao(self, colunas, pesquisa, tabela):
         self.__all_list_boxes = []
@@ -315,7 +309,6 @@ class MainController:
         # Inativa coluna do nome e deixa apenas o id selcionável.
         listbox1 = self.__window_atributo['_id_list_element_']
         listbox2 = self.__window_atributo['_name_list_element_']
-        selecion = 0
         listbox1.Widget.configure( activestyle='none' )
         listbox2.Widget.configure( activestyle='none' )
         listbox1.Widget.select_set( 0 )
@@ -328,7 +321,6 @@ class MainController:
 
                 tabela = values["_combo_element_equip"]
                 if event == "_add_elemento_":
-                    #if values["_id_list_element_"]:
                     id_equip = values["_id_list_element_"][0][0]
                     nome_equip = values["_name_list_element_"][0][0]
 
@@ -462,8 +454,7 @@ class MainController:
                              tabela_condicao, condicoes, params_condicoes, sinais_condicoes, ordem):
         self.__conexao = self.carregaConexao()
         self.__cursor = self.__conexao.cursor()
-        #if colunas[0] != '*':
-            # Monta o script das colunas.
+
         coluna_consulta = ''
         if tabelas_colunas[0] == 'item_atributo':
             coluna_consulta = ''
@@ -480,8 +471,6 @@ class MainController:
         coluna_consulta = coluna_consulta[:-2]
 
         comando = f'select {coluna_consulta} from {tabelas[0]} {tabelas[0]} '
-        #else:
-        #    comando = f'select {colunas[0]} from {tabelas[0]} {tabelas[0]}'
 
         # Insere os joins na consulta.
         for tabela in tabelas[2:]:
@@ -499,7 +488,7 @@ class MainController:
                 comando += f'{tabela_condicao[i]}.{condicoes[i]} {sinais_condicoes[i]} {params_condicoes[i]} and '
 
             comando = comando[:-4]
-        print(comando)
+        print(comando, '\n')
         comando += ordem
 
         self.__cursor.execute( comando )
@@ -656,6 +645,7 @@ class MainController:
                     comando += ' and '
 
         comando += ordem
+        print(comando, '\n')
         self.__cursor.execute( comando )
         resultado = self.__cursor.fetchall()
         # Fecha conexão.
@@ -680,10 +670,9 @@ class MainController:
         except mysql.connector.errors.DataError:
             print( "Insira os dados conforme as colunas: ", tabela_parametros + "." )
         else:
-            print( "inseriu dados" )
             self.__conexao.commit()
             sg.popup( title='Cadastro', custom_text='Dado cadastrado com sucesso!' )
-
+        print(comando, '\n')
         self.__cursor.close()
         self.__conexao.close()
 
@@ -703,7 +692,7 @@ class MainController:
         else:
             self.__conexao.commit()
             sg.popup( title='Dado removido!', custom_text='Dado removido com sucesso!' )
-
+        print(comando, '\n')
         self.__cursor.close()
         self.__conexao.close()
 
